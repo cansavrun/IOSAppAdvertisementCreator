@@ -121,6 +121,42 @@ export function MediaCard({ item, isSelected, onSelect }: MediaCardProps) {
     return () => clearInterval(timer);
   }, [isLoading]);
 
+  // Fallback: poll database every 30s when stuck generating
+  // This catches cases where the browser fetch response is lost
+  useEffect(() => {
+    if (!isLoading || item.project_id === "default") return;
+
+    const pollDb = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/projects/${item.project_id}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const dbItem = data.media_items?.find(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (m: any) => m.id === item.id
+        );
+        if (dbItem && dbItem.status === "completed" && dbItem.result_url) {
+          console.log(`[poll] Found completed item ${item.id} in DB`);
+          useCanvasStore.getState().updateItem(item.id, {
+            status: "completed",
+            result_url: dbItem.result_url,
+            output: dbItem.output,
+            completed_at: dbItem.completed_at,
+          });
+        } else if (dbItem && dbItem.status === "failed") {
+          useCanvasStore.getState().updateItem(item.id, {
+            status: "failed",
+            error_message: dbItem.error_message || "Generation failed",
+          });
+        }
+      } catch {
+        // Silently ignore poll errors
+      }
+    }, 30000); // Every 30 seconds
+
+    return () => clearInterval(pollDb);
+  }, [isLoading, item.id, item.project_id]);
+
   return (
     <div
       onClick={onSelect}
