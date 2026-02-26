@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import type { MediaItem } from "@/types/database";
 import { useCanvasStore } from "@/stores/canvas-store";
@@ -105,6 +106,20 @@ function deleteItem(id: string, e: React.MouseEvent) {
 export function MediaCard({ item, isSelected, onSelect }: MediaCardProps) {
   const isLoading = item.status === "queued" || item.status === "generating";
   const isFailed = item.status === "failed";
+  const [elapsed, setElapsed] = useState(0);
+
+  // Timer for loading states
+  useEffect(() => {
+    if (!isLoading) {
+      setElapsed(0);
+      return;
+    }
+    const start = Date.now();
+    const timer = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - start) / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isLoading]);
 
   return (
     <div
@@ -120,11 +135,21 @@ export function MediaCard({ item, isSelected, onSelect }: MediaCardProps) {
       {/* Media preview */}
       <div className="aspect-square bg-white/5 relative">
         {isLoading ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
             <Spinner size="lg" />
-            <span className="text-xs text-gray-400">
-              {item.status === "queued" ? "In queue..." : "Generating..."}
+            <span className="text-xs text-white font-medium">
+              Generating {item.type}...
             </span>
+            <span className="text-xs text-gray-500">
+              {elapsed > 0
+                ? `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`
+                : "Starting..."}
+            </span>
+            {item.type === "video" && elapsed > 5 && (
+              <span className="text-[10px] text-gray-600 px-3 text-center">
+                Videos take 1-4 min
+              </span>
+            )}
             <div className="absolute inset-0 bg-accent/5 animate-pulse-slow" />
           </div>
         ) : isFailed ? (
