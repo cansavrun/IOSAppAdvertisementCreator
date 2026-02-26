@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
 
     const { data: projects, error } = await supabaseAdmin
       .from("projects")
-      .select("*")
+      .select("*, media_items(id, result_url, type, status)")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
@@ -18,7 +18,23 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ projects: projects || [] });
+    // Attach first completed thumbnail to each project
+    const enriched = (projects || []).map((p) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const items = (p as any).media_items || [];
+      const firstCompleted = items.find(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (i: any) => i.status === "completed" && i.result_url
+      );
+      return {
+        ...p,
+        thumbnail_url: firstCompleted?.result_url || null,
+        media_count: items.length,
+        media_items: undefined, // Don't send full list
+      };
+    });
+
+    return NextResponse.json({ projects: enriched });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

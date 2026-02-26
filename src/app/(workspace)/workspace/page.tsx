@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { CanvasWorkspace } from "@/components/canvas/canvas-workspace";
 import { ScreenshotEditor } from "@/components/screenshot/screenshot-editor";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { useChatStore } from "@/stores/chat-store";
+import { useCanvasStore } from "@/stores/canvas-store";
+import { createProject } from "@/lib/persistence";
 import { cn } from "@/lib/utils";
 
 type RightPanel = "canvas" | "screenshots";
@@ -13,18 +16,34 @@ type MobileView = "chat" | "canvas";
 export default function WorkspacePage() {
   const [rightPanel, setRightPanel] = useState<RightPanel>("canvas");
   const [mobileView, setMobileView] = useState<MobileView>("chat");
+  const initialized = useRef(false);
+
+  // Auto-create a new project when workspace loads
+  useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+
+    // Clear previous state
+    useChatStore.getState().clearMessages();
+    useCanvasStore.getState().clearItems();
+
+    // Create a new project in the background
+    createProject().then((projectId) => {
+      if (projectId) {
+        useChatStore.getState().setProjectId(projectId);
+      }
+    });
+  }, []);
 
   return (
     <div className="flex h-full">
-      {/* Mobile toggle - shown only on small screens */}
+      {/* Mobile toggle */}
       <div className="md:hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex gap-1 p-1 bg-surface border border-white/10 rounded-xl shadow-xl">
         <button
           onClick={() => setMobileView("chat")}
           className={cn(
             "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-            mobileView === "chat"
-              ? "bg-accent text-white"
-              : "text-gray-400"
+            mobileView === "chat" ? "bg-accent text-white" : "text-gray-400"
           )}
         >
           Chat
@@ -33,9 +52,7 @@ export default function WorkspacePage() {
           onClick={() => setMobileView("canvas")}
           className={cn(
             "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-            mobileView === "canvas"
-              ? "bg-accent text-white"
-              : "text-gray-400"
+            mobileView === "canvas" ? "bg-accent text-white" : "text-gray-400"
           )}
         >
           Canvas

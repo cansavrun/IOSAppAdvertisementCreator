@@ -1,5 +1,10 @@
 import { useChatStore } from "@/stores/chat-store";
 import { useCanvasStore } from "@/stores/canvas-store";
+import {
+  persistChatMessage,
+  persistMediaItem,
+  updateProjectTitle,
+} from "@/lib/persistence";
 import type { ChatRequest, ToolCallUI } from "@/types/chat";
 import type { MediaItem } from "@/types/database";
 
@@ -14,6 +19,21 @@ interface SSEEvent {
 export async function sendChatMessage(message: string): Promise<void> {
   const chatStore = useChatStore.getState();
   const canvasStore = useCanvasStore.getState();
+  const projectId = chatStore.projectId || "default";
+
+  // Persist the user message
+  const userMsg = chatStore.messages[chatStore.messages.length - 1];
+  if (userMsg && userMsg.role === "user") {
+    persistChatMessage(projectId, userMsg);
+
+    // Auto-set project title from first user message
+    const userMsgCount = chatStore.messages.filter(
+      (m) => m.role === "user"
+    ).length;
+    if (userMsgCount === 1) {
+      updateProjectTitle(projectId, message);
+    }
+  }
 
   const assistantMsgId = crypto.randomUUID();
   chatStore.addMessage({
@@ -114,10 +134,20 @@ export async function sendChatMessage(message: string): Promise<void> {
       }
     }
 
+    const finalContent = fullText || "I processed your request.";
     chatStore.updateMessage(assistantMsgId, {
-      content: fullText || "I processed your request.",
+      content: finalContent,
       isStreaming: false,
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+    });
+
+    // Persist assistant message to DB
+    persistChatMessage(projectId, {
+      id: assistantMsgId,
+      role: "assistant",
+      content: finalContent,
+      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      createdAt: new Date().toISOString(),
     });
   } catch (error) {
     const errMsg =
@@ -131,7 +161,7 @@ export async function sendChatMessage(message: string): Promise<void> {
   }
 }
 
-// Helper to create a canvas placeholder and optionally start a generation job
+// Helper to create a canvas placeholder and persist it
 function createPlaceholder(
   type: MediaItem["type"],
   prompt: string | null,
@@ -140,9 +170,10 @@ function createPlaceholder(
   parentId?: string
 ): string {
   const id = crypto.randomUUID();
-  useCanvasStore.getState().addItem({
+  const projectId = useChatStore.getState().projectId || "default";
+  const item: MediaItem = {
     id,
-    project_id: "default",
+    project_id: projectId,
     type,
     status: "queued",
     prompt,
@@ -157,7 +188,11 @@ function createPlaceholder(
     error_message: null,
     created_at: new Date().toISOString(),
     completed_at: null,
-  });
+  };
+  useCanvasStore.getState().addItem(item);
+
+  // Save to DB
+  persistMediaItem(projectId, item);
   return id;
 }
 
@@ -188,20 +223,30 @@ function submitGeneration(
       return res.json();
     })
     .then((data) => {
-      // Server returns completed result directly
-      useCanvasStore.getState().updateItem(mediaItemId, {
-        status: "completed",
-        result_url: data.resultUrl,
-        fal_request_id: data.requestId,
+      const update = {
+        status: "completed" as const,
+        result_url: data.resultUrl as string | null,
+        fal_request_id: data.requestId as string | null,
         output: data.output,
         completed_at: new Date().toISOString(),
-      });
+      };
+      useCanvasStore.getState().updateItem(mediaItemId, update);
+
+      // Persist completed item to DB
+      const projectId = useChatStore.getState().projectId || "default";
+      const item = useCanvasStore
+        .getState()
+        .items.find((i) => i.id === mediaItemId);
+      if (item) {
+        persistMediaItem(projectId, { ...item, ...update });
+      }
     })
     .catch((error) => {
+      const errMsg =
+        error instanceof Error ? error.message : "Generation failed";
       useCanvasStore.getState().updateItem(mediaItemId, {
         status: "failed",
-        error_message:
-          error instanceof Error ? error.message : "Generation failed",
+        error_message: errMsg,
       });
     });
 }

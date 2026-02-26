@@ -15,21 +15,36 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
       href={`/project/${project.id}`}
       className="group block rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20 transition-all overflow-hidden"
     >
-      {/* Thumbnail placeholder */}
-      <div className="aspect-video bg-gradient-to-br from-accent/20 to-purple-500/20 flex items-center justify-center">
-        <svg
-          className="w-8 h-8 text-white/20"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.5}
-            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+      {/* Thumbnail */}
+      <div className="aspect-video bg-gradient-to-br from-accent/20 to-purple-500/20 flex items-center justify-center relative overflow-hidden">
+        {project.thumbnail_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={project.thumbnail_url}
+            alt={project.title}
+            className="w-full h-full object-cover"
           />
-        </svg>
+        ) : (
+          <svg
+            className="w-8 h-8 text-white/20"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+            />
+          </svg>
+        )}
+        {/* Media count badge */}
+        {project.media_count ? (
+          <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded font-medium">
+            {project.media_count} item{project.media_count !== 1 ? "s" : ""}
+          </div>
+        ) : null}
       </div>
 
       {/* Info */}

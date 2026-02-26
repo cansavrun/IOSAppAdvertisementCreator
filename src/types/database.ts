@@ -19,6 +19,8 @@ export interface Project {
   status: ProjectStatus;
   created_at: string;
   updated_at: string;
+  thumbnail_url?: string | null;
+  media_count?: number;
 }
 
 export interface MediaItem {
