@@ -10,10 +10,7 @@ export async function POST(req: NextRequest) {
     const { edit_type, source_url, edit_prompt, direction, prompt } = body;
 
     if (!source_url) {
-      return NextResponse.json(
-        { error: "Missing source_url" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing source_url" }, { status: 400 });
     }
 
     const fal = getFal();
@@ -23,21 +20,12 @@ export async function POST(req: NextRequest) {
     switch (edit_type) {
       case "text_guided":
         model = IMAGE_EDIT_MODELS.REVE_EDIT;
-        input = {
-          image_url: source_url,
-          prompt: edit_prompt,
-          num_images: 1,
-        };
+        input = { image_url: source_url, prompt: edit_prompt, num_images: 1 };
         break;
-
       case "style_transfer":
         model = IMAGE_EDIT_MODELS.STYLE_TRANSFER;
-        input = {
-          image_url: source_url,
-          prompt: edit_prompt || "artistic style transfer",
-        };
+        input = { image_url: source_url, prompt: edit_prompt || "artistic style transfer" };
         break;
-
       case "outpaint":
         model = IMAGE_EDIT_MODELS.OUTPAINT;
         input = {
@@ -46,29 +34,31 @@ export async function POST(req: NextRequest) {
           expand_left: direction === "left" || direction === "all" ? 300 : 0,
           expand_right: direction === "right" || direction === "all" ? 300 : 0,
           expand_top: direction === "top" || direction === "all" ? 300 : 0,
-          expand_bottom:
-            direction === "bottom" || direction === "all" ? 300 : 0,
+          expand_bottom: direction === "bottom" || direction === "all" ? 300 : 0,
         };
         break;
-
       default:
-        return NextResponse.json(
-          { error: "Invalid edit_type" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "Invalid edit_type" }, { status: 400 });
     }
 
-    const { request_id } = await fal.queue.submit(model, { input });
+    const result = await fal.subscribe(model, { input, logs: true });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = result.data as any;
+    let resultUrl: string | null = null;
+    if (data?.images?.[0]?.url) resultUrl = data.images[0].url;
+    else if (data?.image?.url) resultUrl = data.image.url;
 
     return NextResponse.json({
-      requestId: request_id,
+      requestId: result.requestId,
       model,
-      status: "queued",
+      status: "completed",
+      resultUrl,
+      output: data,
     });
   } catch (error) {
     console.error("Image edit error:", error);
-    const message =
-      error instanceof Error ? error.message : "Edit failed";
+    const message = error instanceof Error ? error.message : "Edit failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

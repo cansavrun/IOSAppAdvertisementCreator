@@ -10,10 +10,7 @@ export async function POST(req: NextRequest) {
     const { edit_type, source_url, style_prompt, edit_prompt, continuation_prompt } = body;
 
     if (!source_url) {
-      return NextResponse.json(
-        { error: "Missing source_url" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing source_url" }, { status: 400 });
     }
 
     const fal = getFal();
@@ -23,47 +20,38 @@ export async function POST(req: NextRequest) {
     switch (edit_type) {
       case "restyle":
         model = VIDEO_EDIT_MODELS.LUCY_RESTYLE;
-        input = {
-          video_url: source_url,
-          prompt: style_prompt,
-        };
+        input = { video_url: source_url, prompt: style_prompt };
         break;
-
       case "v2v":
         model = VIDEO_EDIT_MODELS.KLING_V2V_EDIT;
-        input = {
-          video_url: source_url,
-          prompt: edit_prompt,
-        };
+        input = { video_url: source_url, prompt: edit_prompt };
         break;
-
       case "extend":
         model = VIDEO_EDIT_MODELS.VEO31_EXTEND;
-        input = {
-          video_url: source_url,
-          prompt: continuation_prompt,
-          duration: "7",
-        };
+        input = { video_url: source_url, prompt: continuation_prompt, duration: "7" };
         break;
-
       default:
-        return NextResponse.json(
-          { error: "Invalid edit_type" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "Invalid edit_type" }, { status: 400 });
     }
 
-    const { request_id } = await fal.queue.submit(model, { input });
+    const result = await fal.subscribe(model, { input, logs: true });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = result.data as any;
+    let resultUrl: string | null = null;
+    if (data?.video?.url) resultUrl = data.video.url;
+    else if (data?.images?.[0]?.url) resultUrl = data.images[0].url;
 
     return NextResponse.json({
-      requestId: request_id,
+      requestId: result.requestId,
       model,
-      status: "queued",
+      status: "completed",
+      resultUrl,
+      output: data,
     });
   } catch (error) {
     console.error("Video edit error:", error);
-    const message =
-      error instanceof Error ? error.message : "Edit failed";
+    const message = error instanceof Error ? error.message : "Edit failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

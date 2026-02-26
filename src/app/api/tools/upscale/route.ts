@@ -6,36 +6,38 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { source_url, scale_factor = 2 } = body;
+    const { source_url, scale_factor = 2 } = await req.json();
 
     if (!source_url) {
-      return NextResponse.json(
-        { error: "Missing source_url" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing source_url" }, { status: 400 });
     }
 
     const fal = getFal();
     const model = IMAGE_EDIT_MODELS.UPSCALE;
 
-    const { request_id } = await fal.queue.submit(model, {
+    const result = await fal.subscribe(model, {
       input: {
         image_url: source_url,
         upscale_factor: scale_factor,
         prompt: "masterpiece, best quality, highres",
       },
+      logs: true,
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = result.data as any;
+    const resultUrl = data?.image?.url || data?.images?.[0]?.url || null;
+
     return NextResponse.json({
-      requestId: request_id,
+      requestId: result.requestId,
       model,
-      status: "queued",
+      status: "completed",
+      resultUrl,
+      output: data,
     });
   } catch (error) {
     console.error("Upscale error:", error);
-    const message =
-      error instanceof Error ? error.message : "Upscale failed";
+    const message = error instanceof Error ? error.message : "Upscale failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

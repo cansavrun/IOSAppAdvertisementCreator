@@ -27,24 +27,37 @@ export async function POST(req: NextRequest) {
 
     const fal = getFal();
 
-    // Build input based on model type
     const input: Record<string, unknown> = {
       prompt,
       duration,
       aspect_ratio,
     };
 
-    // Image-to-video models need an image_url
     if (image_url) {
       input.image_url = image_url;
     }
 
-    const { request_id } = await fal.queue.submit(model, { input });
+    // Use fal.subscribe which handles the full queue lifecycle
+    const result = await fal.subscribe(model, {
+      input,
+      logs: true,
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = result.data as any;
+
+    let resultUrl: string | null = null;
+    if (data?.video?.url) {
+      resultUrl = data.video.url;
+    } else if (data?.images?.[0]?.url) {
+      resultUrl = data.images[0].url;
+    }
 
     return NextResponse.json({
-      requestId: request_id,
-      model,
-      status: "queued",
+      requestId: result.requestId,
+      status: "completed",
+      resultUrl,
+      output: data,
     });
   } catch (error) {
     console.error("Video generation error:", error);

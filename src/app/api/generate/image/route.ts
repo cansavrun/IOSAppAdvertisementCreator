@@ -26,19 +26,32 @@ export async function POST(req: NextRequest) {
       "16:9": "landscape_16_9",
     };
 
-    const { request_id } = await fal.queue.submit(model, {
+    // Use fal.subscribe which handles the full queue lifecycle
+    const result = await fal.subscribe(model, {
       input: {
         prompt,
         image_size: (sizeMap[aspect_ratio] || "square_hd") as "square_hd",
         num_images,
         output_format: "png",
       },
+      logs: true,
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = result.data as any;
+
+    let resultUrl: string | null = null;
+    if (data?.images?.[0]?.url) {
+      resultUrl = data.images[0].url;
+    } else if (data?.image?.url) {
+      resultUrl = data.image.url;
+    }
+
     return NextResponse.json({
-      requestId: request_id,
-      model,
-      status: "queued",
+      requestId: result.requestId,
+      status: "completed",
+      resultUrl,
+      output: data,
     });
   } catch (error) {
     console.error("Image generation error:", error);

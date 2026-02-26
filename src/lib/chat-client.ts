@@ -1,7 +1,5 @@
 import { useChatStore } from "@/stores/chat-store";
 import { useCanvasStore } from "@/stores/canvas-store";
-import { useJobStore } from "@/stores/job-store";
-import { startPolling } from "@/lib/job-poller";
 import type { ChatRequest, ToolCallUI } from "@/types/chat";
 import type { MediaItem } from "@/types/database";
 
@@ -163,45 +161,49 @@ function createPlaceholder(
   return id;
 }
 
-// Submit to generation API and start polling
-async function submitGeneration(
+// Submit to generation API - the server uses fal.subscribe() which
+// waits for completion, so the response contains the final result.
+// We fire this in the background so the UI stays responsive.
+function submitGeneration(
   endpoint: string,
   body: Record<string, unknown>,
-  mediaItemId: string,
-  model: string
-): Promise<void> {
-  const res = await fetch(endpoint, {
+  mediaItemId: string
+): void {
+  // Update canvas to show generating state
+  useCanvasStore.getState().updateItem(mediaItemId, { status: "generating" });
+
+  // Fire the request in the background (don't await)
+  fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error || `HTTP ${res.status}`);
-  }
-
-  const data = await res.json();
-  const requestId = data.requestId as string;
-
-  // Update canvas item with request ID
-  useCanvasStore.getState().updateItem(mediaItemId, {
-    fal_request_id: requestId,
-    status: "generating",
-  });
-
-  // Create job and start polling
-  const job = {
-    id: crypto.randomUUID(),
-    mediaItemId,
-    falRequestId: requestId,
-    falModel: model,
-    status: "generating" as const,
-    progress: 0,
-    startedAt: Date.now(),
-  };
-  useJobStore.getState().addJob(job);
-  startPolling(job);
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(
+          (err as { error?: string }).error || `HTTP ${res.status}`
+        );
+      }
+      return res.json();
+    })
+    .then((data) => {
+      // Server returns completed result directly
+      useCanvasStore.getState().updateItem(mediaItemId, {
+        status: "completed",
+        result_url: data.resultUrl,
+        fal_request_id: data.requestId,
+        output: data.output,
+        completed_at: new Date().toISOString(),
+      });
+    })
+    .catch((error) => {
+      useCanvasStore.getState().updateItem(mediaItemId, {
+        status: "failed",
+        error_message:
+          error instanceof Error ? error.message : "Generation failed",
+      });
+    });
 }
 
 async function executeToolCall(toolCall: ToolCallUI): Promise<void> {
@@ -215,15 +217,14 @@ async function executeToolCall(toolCall: ToolCallUI): Promise<void> {
       const prompt = input.prompt as string;
       const mediaItemId = createPlaceholder("image", prompt, model, input);
 
-      await submitGeneration(
+      submitGeneration(
         "/api/generate/image",
         {
           prompt,
           aspect_ratio: input.aspect_ratio || "1:1",
           model,
         },
-        mediaItemId,
-        model
+        mediaItemId
       );
       break;
     }
@@ -234,7 +235,7 @@ async function executeToolCall(toolCall: ToolCallUI): Promise<void> {
       const prompt = input.prompt as string;
       const mediaItemId = createPlaceholder("video", prompt, model, input);
 
-      await submitGeneration(
+      submitGeneration(
         "/api/generate/video",
         {
           prompt,
@@ -243,8 +244,7 @@ async function executeToolCall(toolCall: ToolCallUI): Promise<void> {
           aspect_ratio: input.aspect_ratio || "9:16",
           model,
         },
-        mediaItemId,
-        model
+        mediaItemId
       );
       break;
     }
@@ -262,7 +262,7 @@ async function executeToolCall(toolCall: ToolCallUI): Promise<void> {
         sourceId
       );
 
-      await submitGeneration(
+      submitGeneration(
         "/api/edit/image",
         {
           media_item_id: sourceId,
@@ -270,8 +270,7 @@ async function executeToolCall(toolCall: ToolCallUI): Promise<void> {
           edit_type: "text_guided",
           source_url: getSourceUrl(sourceId),
         },
-        mediaItemId,
-        model
+        mediaItemId
       );
       break;
     }
@@ -287,13 +286,12 @@ async function executeToolCall(toolCall: ToolCallUI): Promise<void> {
         sourceId
       );
 
-      await submitGeneration(
+      submitGeneration(
         "/api/tools/remove-bg",
         {
           source_url: getSourceUrl(sourceId),
         },
-        mediaItemId,
-        model
+        mediaItemId
       );
       break;
     }
@@ -309,14 +307,13 @@ async function executeToolCall(toolCall: ToolCallUI): Promise<void> {
         sourceId
       );
 
-      await submitGeneration(
+      submitGeneration(
         "/api/tools/upscale",
         {
           source_url: getSourceUrl(sourceId),
           scale_factor: input.scale_factor || 2,
         },
-        mediaItemId,
-        model
+        mediaItemId
       );
       break;
     }
@@ -333,7 +330,7 @@ async function executeToolCall(toolCall: ToolCallUI): Promise<void> {
         sourceId
       );
 
-      await submitGeneration(
+      submitGeneration(
         "/api/edit/image",
         {
           media_item_id: sourceId,
@@ -341,8 +338,7 @@ async function executeToolCall(toolCall: ToolCallUI): Promise<void> {
           edit_type: "style_transfer",
           source_url: getSourceUrl(sourceId),
         },
-        mediaItemId,
-        model
+        mediaItemId
       );
       break;
     }
@@ -358,7 +354,7 @@ async function executeToolCall(toolCall: ToolCallUI): Promise<void> {
         sourceId
       );
 
-      await submitGeneration(
+      submitGeneration(
         "/api/edit/image",
         {
           media_item_id: sourceId,
@@ -367,8 +363,7 @@ async function executeToolCall(toolCall: ToolCallUI): Promise<void> {
           prompt: input.prompt,
           source_url: getSourceUrl(sourceId),
         },
-        mediaItemId,
-        model
+        mediaItemId
       );
       break;
     }
@@ -386,7 +381,7 @@ async function executeToolCall(toolCall: ToolCallUI): Promise<void> {
         sourceId
       );
 
-      await submitGeneration(
+      submitGeneration(
         "/api/edit/video",
         {
           media_item_id: sourceId,
@@ -394,8 +389,7 @@ async function executeToolCall(toolCall: ToolCallUI): Promise<void> {
           style_prompt: stylePrompt,
           source_url: getSourceUrl(sourceId),
         },
-        mediaItemId,
-        model
+        mediaItemId
       );
       break;
     }
@@ -412,7 +406,7 @@ async function executeToolCall(toolCall: ToolCallUI): Promise<void> {
         sourceId
       );
 
-      await submitGeneration(
+      submitGeneration(
         "/api/edit/video",
         {
           media_item_id: sourceId,
@@ -420,8 +414,7 @@ async function executeToolCall(toolCall: ToolCallUI): Promise<void> {
           edit_prompt: editPrompt,
           source_url: getSourceUrl(sourceId),
         },
-        mediaItemId,
-        model
+        mediaItemId
       );
       break;
     }
@@ -438,7 +431,7 @@ async function executeToolCall(toolCall: ToolCallUI): Promise<void> {
         sourceId
       );
 
-      await submitGeneration(
+      submitGeneration(
         "/api/edit/video",
         {
           media_item_id: sourceId,
@@ -446,8 +439,7 @@ async function executeToolCall(toolCall: ToolCallUI): Promise<void> {
           continuation_prompt: contPrompt,
           source_url: getSourceUrl(sourceId),
         },
-        mediaItemId,
-        model
+        mediaItemId
       );
       break;
     }
