@@ -208,12 +208,15 @@ function submitGeneration(
   useCanvasStore.getState().updateItem(mediaItemId, { status: "generating" });
 
   // Fire the request in the background (don't await)
+  console.log(`[gen] Starting ${endpoint} for item ${mediaItemId}`);
+
   fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   })
     .then(async (res) => {
+      console.log(`[gen] ${endpoint} responded: ${res.status}`);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(
@@ -223,6 +226,12 @@ function submitGeneration(
       return res.json();
     })
     .then((data) => {
+      console.log(`[gen] Result for ${mediaItemId}:`, {
+        resultUrl: data.resultUrl ? data.resultUrl.slice(0, 80) + "..." : null,
+        status: data.status,
+        hasOutput: !!data.output,
+      });
+
       const update = {
         status: "completed" as const,
         result_url: data.resultUrl as string | null,
@@ -242,6 +251,7 @@ function submitGeneration(
       }
     })
     .catch((error) => {
+      console.error(`[gen] Error for ${mediaItemId}:`, error);
       const errMsg =
         error instanceof Error ? error.message : "Generation failed";
       useCanvasStore.getState().updateItem(mediaItemId, {

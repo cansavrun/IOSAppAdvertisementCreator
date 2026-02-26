@@ -3,6 +3,7 @@ import { getFal } from "@/lib/fal";
 import { generateImageSchema } from "@/lib/validations";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 120; // 2 minutes max for image generation
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,12 +41,18 @@ export async function POST(req: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = result.data as any;
 
+    console.log("[image] fal.ai response keys:", Object.keys(data || {}));
+
     let resultUrl: string | null = null;
     if (data?.images?.[0]?.url) {
       resultUrl = data.images[0].url;
     } else if (data?.image?.url) {
       resultUrl = data.image.url;
+    } else if (typeof data?.url === "string") {
+      resultUrl = data.url;
     }
+
+    console.log("[image] Extracted resultUrl:", resultUrl);
 
     return NextResponse.json({
       requestId: result.requestId,
