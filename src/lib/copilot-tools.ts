@@ -58,7 +58,7 @@ export const COPILOT_TOOLS: Anthropic.Tool[] = [
         model: {
           type: "string",
           enum: [
-            "fal-ai/kling-video/v2.1/pro",
+            "fal-ai/kling-video/v2.1/master/text-to-video",
             "fal-ai/kling-video/v2.1/pro/image-to-video",
             "fal-ai/veo2/image-to-video",
           ],

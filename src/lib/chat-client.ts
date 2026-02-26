@@ -231,7 +231,7 @@ async function executeToolCall(toolCall: ToolCallUI): Promise<void> {
 
     case "generate_video": {
       const model =
-        (input.model as string) || "fal-ai/kling-video/v2.1/pro";
+        (input.model as string) || "fal-ai/kling-video/v2.1/master/text-to-video";
       const prompt = input.prompt as string;
       const mediaItemId = createPlaceholder("video", prompt, model, input);
 

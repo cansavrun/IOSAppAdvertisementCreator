@@ -6,7 +6,7 @@ export const IMAGE_MODELS = {
 } as const;
 
 export const VIDEO_MODELS = {
-  KLING_V21_PRO: "fal-ai/kling-video/v2.1/pro",
+  KLING_V21_PRO: "fal-ai/kling-video/v2.1/master/text-to-video",
   KLING_V21_PRO_I2V: "fal-ai/kling-video/v2.1/pro/image-to-video",
   VEO2_I2V: "fal-ai/veo2/image-to-video",
 } as const;
